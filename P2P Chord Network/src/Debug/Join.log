@@ -1,0 +1,12 @@
+﻿  header.c
+  main.c
+  procFileListen.c
+  procFileRecv.c
+  procFindPred.c
+  procFixFinger.c
+  procJoin.c
+  procLeaveKeys.c
+  procPingPong.c
+  procRecvMsg.c
+  코드를 생성하고 있습니다...
+  Join.vcxproj -> C:\Users\XNOTE\Desktop\test\Join\Debug\Join.exe

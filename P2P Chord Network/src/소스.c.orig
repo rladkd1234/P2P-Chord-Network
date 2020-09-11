@@ -1,0 +1,1432 @@
+#include "header.c"
+
+SOCKET rqSock, rpSock, flSock, frSock, fsSock, ffSock;
+nodeType myNode = { 0 };
+HANDLE hThread[4]; // procRecvMsg[], procPPandFF, 
+
+int NofProcRecvThread;
+HANDLE procRecvThread[100];
+HANDLE joinThread;
+HANDLE findPreThread;
+HANDLE fixFingerThread;
+HANDLE fileListenThread;
+HANDLE fileSendThread;
+HANDLE fileReceiveThread;
+HANDLE hMutex = NULL;
+
+
+msgInfoType sharing;
+//쓰레드사이에 공유할 정보
+//메시지 인코딩 디코딩 함수 있으면 좀더 보기 좋을거 같음
+int sMode = 1;
+
+unsigned WINAPI procRecvMsg(void *i);
+unsigned WINAPI procJoin(void *arg);
+unsigned WINAPI procFindPred(void *arg);
+unsigned WINAPI procFixFinger(void *arg);
+unsigned WINAPI procFileListen(void *arg);
+unsigned WINAPI procStabilizeLeave(void *arg);
+<<<<<<< HEAD
+=======
+unsigned WINAPI procFileSend(void *arg);
+unsigned WINAPI procFileRecv(void *arg);
+
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+
+unsigned int str_hash(const char *);
+// A Hash Function from a string to the ID/key space
+int modIn(int modN, int targNum, int range1, int range2, int leftmode, int rightmode);
+// For checking if targNum is "in" the range using left and right modes 
+// under modN modular environment 
+int twoPow(int power);
+// For getting a power of 2 
+int modMinus(int modN, int minuend, int subtrand);
+// For modN modular operation of "minend - subtrand"
+int modPlus(int modN, int addend1, int addend2);
+// For modN modular operation of "addend1 + addend2"
+
+void printHelpCommand()
+{
+	printf("Enter a command - <c>reate : Create the chord network\n");
+	printf("Enter a command - <j>oin : Join the chord network\n");
+	printf("Enter a command - <l>eave : Leave the chord network\n");
+	printf("Enter a command - <a>dd : Add a file to the nework\n");
+	printf("Enter a command - <d>elete : Delete a file to the newtork\n");
+	printf("Enter a command - <s>earch : File search and download\n");
+	printf("Enter a command - <f>inger : Show the finger table\n");
+	printf("Enter a command - <i>nfo : Show the node information\n");
+	printf("Enter a command - <m>ute : Toggle the silent mode\n");
+	printf("Enter a command - <h>elp : Show the help message\n");
+	printf("Enter a command - <b>ackUp :Show my Backup File\n");
+	printf("Enter a command - <q>uit : Quit the program\n");
+}
+int CheckMsgGood(int a, int b, int c, int d)//받은 메시지가 자신이 원하는것인지 확인하기 위한 함수
+{
+
+
+
+
+	return 0;
+
+}
+int main(int argc, char* argv[])
+{
+	FILE * fp; //파일이 실제로 존재하나 검사하는 함수임
+	WSADATA wsaData;         // Structure for WinSock setup communication
+	int exitFlag = 0;       //전역변수로 해야될거 같음
+	nodeInfoType helperNode;
+	chordHeaderType rqMsg, rpMsg;
+	int AddrLen = sizeof(struct sockaddr_in);
+	char *file_name_temp = "\0"; int file_key_temp; //아무리봐도 해싱함수는 시간불변이 아님
+	struct sockaddr_in receiveAddr;
+
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) { // Load Winsock 2.2 DLL
+		fprintf(stderr, "WSAStartup() failed");
+		exit(1);
+	}
+
+	//WaitForSingleObjects(2, hThread, TRUE, INFINITE);
+
+	/*MyNode의 소켓주소 저장*/
+	memset(&myNode, 0, sizeof(myNode));
+	myNode.nodeInfo.addrInfo.sin_family = AF_INET;
+	myNode.nodeInfo.addrInfo.sin_addr.s_addr = inet_addr(argv[1]);
+	//myNode.nodeInfo.addrInfo.sin_addr.s_addr = inet_addr(IN_ADDR_ANY);
+	myNode.nodeInfo.addrInfo.sin_port = htons(atoi(argv[2]));
+
+	char *curIPstr = inet_ntoa(myNode.nodeInfo.addrInfo.sin_addr);
+	myNode.nodeInfo.ID = str_hash(curIPstr);
+
+	if (!sMode) {
+		printf("myNode IP address : %s, Port Number : %d, ID : %d \n\n",
+			inet_ntoa(myNode.nodeInfo.addrInfo.sin_addr), ntohs(myNode.nodeInfo.addrInfo.sin_port), myNode.nodeInfo.ID);
+	}
+
+	printHelpCommand();
+
+	hMutex = CreateMutex(NULL, FALSE, NULL);
+
+	int createFlag = 0;
+	char helperNodeIP[30];
+	int helperNodePort = 0;
+	char buf[1024];
+
+	while (1) {
+
+		char userInput = ' ';
+		printf("UserInput : <'help' for help message>.\n");
+		scanf(" %c", &userInput);
+
+		switch (userInput) {
+
+			/*Create 소스 시작 !!!*/
+		case 'C':
+		case 'c':
+			printf("Create 시작!!!\n");
+			//181103 FingerTable 만듬
+			myNode.fileInfo.fileNum = 0;
+			myNode.chordInfo.fingerInfo.Pre = myNode.nodeInfo;
+
+			for (int i = 0; i < baseM; i++)
+			{
+				myNode.chordInfo.fingerInfo.finger[i] = myNode.nodeInfo;
+			}
+
+			/*Socket Init*/
+			if ((rqSock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+				perror("Error: socket failed!");
+				exit(1);
+			}
+
+			if ((rpSock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+				perror("Error: socket failed!");
+				exit(1);
+			}
+		
+
+			procRecvThread[0] = (HANDLE)_beginthreadex(NULL, 0, (void*)procRecvMsg, (void*)&exitFlag, 0, NULL);
+			fixFingerThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFixFinger, (void*)&exitFlag, 0, NULL);
+			createFlag = 1;
+
+			break;
+
+
+			/*Join 소스 시작 !!!*/
+		case 'J':
+		case 'j':
+
+<<<<<<< HEAD
+			printf("Join 시작!!!\n");
+
+=======
+            myNode.fileInfo.fileNum = 0;
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+			/*핑거 테이블 초기화*/
+			myNode.chordInfo.fingerInfo.Pre.ID = -1;
+			for (int i = 0; i < baseM; i++)
+				myNode.chordInfo.fingerInfo.finger[i].ID = -1;
+
+			/*Helper 노드의 정보 입력*/
+			printf("HelperNode의 IP주소 : \n");
+			scanf("%s", helperNodeIP);
+			//printf("입력된 HelperNode의 주소 : %s\n", helperNodeIP);
+
+			printf("HelperNode의 Port번호 : \n");
+			scanf("%d", &helperNodePort);
+			//	printf("입력된 HelperNode의 Port번호 : %d\n", helperNodePort);
+
+			memset(&helperNode, 0, sizeof(helperNode));
+			helperNode.addrInfo.sin_family = AF_INET;
+			helperNode.addrInfo.sin_addr.s_addr = inet_addr(helperNodeIP);
+			helperNode.addrInfo.sin_port = htons(helperNodePort);
+			
+			if (!sMode) {
+				printf("My IP Address: %s, Port No: %d, ID: %d\n",
+					inet_ntoa(myNode.nodeInfo.addrInfo.sin_addr), ntohs(myNode.nodeInfo.addrInfo.sin_port), myNode.nodeInfo.ID);
+
+				printf("HelperNode IP address : %s, Port Number : %d\n",
+					inet_ntoa(helperNode.addrInfo.sin_addr), ntohs(helperNode.addrInfo.sin_port));
+			}
+
+			/*Sock Init*/
+				if ((rqSock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+					perror("Error: socket failed!");
+					exit(1);
+				}
+
+			if ((rpSock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+				perror("Error: socket failed!");
+				exit(1);
+			}
+
+	
+			/*Helper에게 SuccInfo요청*/
+			memset((char*)&rqMsg, 0, sizeof(rqMsg));
+			memset((char*)&rpMsg, 0, sizeof(rpMsg));
+
+			rqMsg.msgType = REQUEST; // request
+			rqMsg.msgID = JOINCOMMAND; // JoinInfo
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+		//	printf("rqMsg->addrInfo : %s\nMsg->addr_port : %d\n", inet_ntoa(rqMsg.nodeInfo.addrInfo.sin_addr), ntohs(rqMsg.nodeInfo.addrInfo.sin_port));
+
+			printf("JoinInfo 요청함.\n");
+			sendto(rqSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr *) &helperNode.addrInfo, AddrLen);
+
+			printf("waiting...\n");
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &receiveAddr, &AddrLen);
+			printf("JoinInfo 응답받음.\n");
+			printf("응답 노드 주소 : %s, 응답 노드 포트 : %d\n",
+				inet_ntoa(receiveAddr.sin_addr), ntohs(receiveAddr.sin_port));
+			printf("SuccInfo 응답받음.\n");
+			/*메시지 처리*/
+			printf("Succ 정보 : addr: %s, port : %d, id : %d\n",
+				inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+
+			WaitForSingleObject(hMutex, INFINITE);
+			myNode.chordInfo.fingerInfo.finger[0] = rpMsg.nodeInfo;
+			ReleaseMutex(hMutex);
+
+			/*실수... JoinRequest로 이미 Succ 받아옴  189~213Line)
+
+			/* SUCCSESSOR INFO 시작!!!*/
+			/*송신메시지(SUCCSESSOR INFO) 생성*/
+			//memset((char*)&rqMsg, 0, sizeof(rqMsg));
+
+			///*송신메시지(SUCCSESSOR INFO 인코딩)*/
+			//rqMsg.msgType = REQUEST; // request
+			//rqMsg.msgID = SUCCINFOCOMMAND;   // Pre
+			//rqMsg.nodeInfo = myNode.nodeInfo;
+			//rqMsg.moreInfo = 0;
+			//rqMsg.bodySize = 0;
+			//printf("SuccInfo 요청함.\n");
+
+			//sendto(rqSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr *) &rpMsg.nodeInfo.addrInfo, AddrLen);
+
+			//printf("waiting...\n");
+
+			//memset((char*)&rpMsg, 0, sizeof(rpMsg));
+			//recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &receiveAddr, &AddrLen);
+		
+			//printf("SuccInfo로 받은 정보 : addr: %s, port : %d, id : %d\n",
+			//	inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+			
+			/*처리*/
+
+			/*proRecvThread 시작*/
+			procRecvThread[0] = (HANDLE)_beginthreadex(NULL, 0, (void*)procRecvMsg, (void*)&exitFlag, 0, NULL);
+			printf("Join노드 proRecvThread 시작!!\n");
+		
+			/*PRE_INFO Req 메시지 생성*/
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+
+			/*PRE_Info Req 메시지 인코딩*/
+			rqMsg.msgID = PREINFOCOMMAND;
+			rqMsg.msgType = REQUEST;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+			if (!sMode) {
+				printf("Succ에게 PreInfo 요청함.\n");
+			}
+			sendto(rqSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr *) &myNode.chordInfo.fingerInfo.finger[0].addrInfo, AddrLen);
+
+			if (!sMode) {
+				printf("waiting...\n");
+			}
+
+			memset((char*)&rpMsg, 0, sizeof(rpMsg));
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &receiveAddr, &AddrLen);
+
+			if (!sMode) {
+				printf("PreInfo 응답받음.\n");
+			}
+
+			if (!sMode) {
+				printf("SuccInfo로 받은 Pre정보 : addr: %s, port : %d, id : %d\n",
+					inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+			}
+
+			WaitForSingleObject(hMutex, INFINITE);
+			myNode.chordInfo.fingerInfo.Pre = rpMsg.nodeInfo;
+			ReleaseMutex(hMutex);
+			/*PRE에게 SUCCESSOR_UPDATE 시작 !!!*/
+
+			/*SUCC_UPDATE 메시지 생성*/
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+
+			/*PRE_Info Req 메시지 인코딩*/
+			rqMsg.msgID = SUCCUPDATECOMMAND;
+			rqMsg.msgType = REQUEST;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+			if (!sMode) {
+				printf("Pre에게 SUCC_UPDATE 요청함.\n");
+			}
+			sendto(rqSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr *) &myNode.chordInfo.fingerInfo.Pre.addrInfo, AddrLen);
+
+			if (!sMode) {
+				printf("waiting...\n");
+			}
+
+			memset((char*)&rpMsg, 0, sizeof(rpMsg));
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &receiveAddr, &AddrLen);
+			if (!sMode) {
+				printf("Pre에게 SUCC_UPDATE 응답받음.\n");
+			}
+
+
+			/*SUCC에게 PRE_UPDATE 요청*/
+
+			/*PRE UPDATE 메시지 생성*/
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+
+			/*PRE_Info Req 메시지 인코딩*/
+			rqMsg.msgID = PREUPDATECOMMAND;
+			rqMsg.msgType = REQUEST;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+			if (!sMode) {
+				printf("SUCC에게 PRE_UPDATE 요청함.\n");
+			}
+			sendto(rqSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr *) &myNode.chordInfo.fingerInfo.finger[0].addrInfo, AddrLen);
+			if (!sMode) {
+				printf("waiting...\n");
+			}
+			memset((char*)&rpMsg, 0, sizeof(rpMsg));
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &receiveAddr, &AddrLen);
+			if (!sMode) {
+				printf("SUCC에게 PRE_UPDATE 응답받음.\n");
+			}
+
+			fixFingerThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFixFinger, (void*)&exitFlag, 0, NULL);
+
+			break;
+
+			/*Leave 소스 시작 !!!*/
+		case 'L':
+		case 'l':
+			break;
+
+			/*Add 소스 시작 !!!*/
+		case 'A':
+		case 'a':
+			
+			memset(buf, 0x00, 1024);
+			printf("파일 추가 시작\n");
+			printf("추가할 파일 이름\n");
+			scanf("%s", buf);
+			if (NULL==fopen(buf, "r"))
+			{
+				printf("그러한 파일이 존재하지 않습니다.");
+				continue;
+			}
+			
+			myNode.fileInfo.fileNum++;
+			strcpy(myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].Name , buf);
+			myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].Key = str_hash(buf);
+			int fingerId = myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].Key;
+			myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].owner = myNode.nodeInfo;
+			int AddrLen = sizeof(struct sockaddr_in);
+			int retval;
+			nodeInfoType recvNode;
+			struct sockaddr_in receiveAddr;
+<<<<<<< HEAD
+			chordHeaderType rqMsg, rpMsg;
+			
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = FINDPRECOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = fingerId;
+			rqMsg.bodySize = 0;
+=======
+			chordHeaderType reqMsg, repMsg;
+			//임시로 이부분에서만 사용하도록 선언해놓음
+
+			reqMsg.msgType = REQUEST;
+			reqMsg.msgID = FINDPRECOMMAND;
+			reqMsg.nodeInfo = myNode.nodeInfo;
+			reqMsg.moreInfo = fingerId;
+			reqMsg.bodySize = 0;
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+			
+
+			sendto(rqSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[0].addrInfo, AddrLen);
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr,&AddrLen);
+			//보낸 노드가 자신이 요청한노드일경우 그리고 자신이 원하는 리스폰스 타입일경우 
+			
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = SUCCINFOCOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+			
+<<<<<<< HEAD
+			sendto(ffSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&rpMsg.nodeInfo.addrInfo, AddrLen);
+			recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+			
+			
+			myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].refOwner = rpMsg.nodeInfo;
+			//fileListenThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFileListen, (void*)&exitFlag, 0, NULL);
+			//파일 id추가 
+=======
+			sendto(rqSock, (char *)&reqMsg, sizeof(reqMsg), 0, (struct sockaddr*)&repMsg.nodeInfo.addrInfo, AddrLen);
+			recvfrom(rqSock, (char*)&repMsg, sizeof(repMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+			
+			
+			myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].refOwner = repMsg.nodeInfo;
+
+            memset(&reqMsg, 0, sizeof(reqMsg));
+            reqMsg.msgType = REQUEST;
+            reqMsg.msgID = FILEADDCOMMAND;
+            reqMsg.nodeInfo = myNode.nodeInfo;
+            reqMsg.moreInfo = 0;
+            reqMsg.fileInfo = myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1];
+            reqMsg.bodySize = 0;
+
+            sendto(rqSock, (char *)&reqMsg, sizeof(reqMsg),0,(struct sockaddr*)&repMsg.nodeInfo.addrInfo, AddrLen);
+            recvfrom(rqSock, (char *)&repMsg, sizeof(repMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+			fileListenThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFileListen, (void*)&exitFlag, 0, NULL);
+            //자신이 소유할때는 자신의 정보와 그 파일의 참조자 정보를 갖고 있는데
+     
+			//파일 리쓴 쓰레드를 크리에이트나 조인했을때부터 생성할 수 있음
+            //파일의 수가 추가되자마자 쓰레드가 실행되는것이 좀더 직관적임
+            //파일 id추가 
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+			//id사용하여 succ 알아낸뒤 참조정보 추가함
+			//자신의 구조체에 파일정보추가
+			//파일이 없다 생겼으므로 file send thread 실행 
+			//2018 11 07
+			break;
+
+			/*Delete 소스 시작 !!!*/
+		case 'D':
+		case 'd':
+			break;
+
+			/*Search 소스 시작 !!!*/
+		case 'S':
+		case 's':
+<<<<<<< HEAD
+	
+=======
+			printf("파일 이름을 입력하세요\n");
+			scanf("%s", file_name_temp);
+			file_key_temp = str_hash(file_name_temp);
+            //해싱함수가 시간불변이라는 가정이 필요함
+            //자신이 갖고있는지 확인하는 가정이 필요
+			memset(&rqMsg, 0, sizeof(rqMsg));
+
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = FINDPRECOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = file_key_temp; // file_key
+			rqMsg.bodySize = 0;
+
+
+			sendto(rqSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[0].addrInfo, AddrLen);
+			printf("waiting...\n");
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+
+
+			/*SUCCSESSORINFO 전송*/
+			//	memset(&rpMsg, 0, sizeof(chordHeaderType));
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = SUCCINFOCOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+			sendto(rqSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&rpMsg.nodeInfo.addrInfo, AddrLen);
+			printf("waiting...\n");
+			recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+			printf("파일 참조자 정보 : addr: %s, port : %d, id : %d\n",
+				inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+            //파일 참조자를 키를 이용해 찾는 과정
+			//file_key_temp로 find_succ함
+			//frSockthread 생성
+	        
+            //sender가 아니라 받는쪽 정보라 해석
+
+			fileReceiveThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFileRecv, (void*)&exitFlag, 0, NULL);
+
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = FILEDOWNCOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+            sendto(rqSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&rpMsg.nodeInfo.addrInfo, AddrLen);
+            //파일 소유자에게 다운로드 커맨드를 보냄
+
+			//받은 주소 이용할 전역변수 필요함
+			//exitFlag 다르게 해야될거 같음
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+			break;
+
+			/*Finger 소스 시작 !!!*/
+		case 'F':
+		case 'f':
+			printf("Finger table Information:\n");
+			printf("My IP Address: %s, Port No: %d, ID: %d\n",
+				inet_ntoa(myNode.nodeInfo.addrInfo.sin_addr), ntohs(myNode.nodeInfo.addrInfo.sin_port), myNode.nodeInfo.ID);
+
+			printf("Pre IP Addr : %s, Port No : %d, ID : %d\n",
+				inet_ntoa(myNode.chordInfo.fingerInfo.Pre.addrInfo.sin_addr),
+				ntohs(myNode.chordInfo.fingerInfo.Pre.addrInfo.sin_port), myNode.chordInfo.fingerInfo.Pre.ID);
+			for (int i = 0; i < baseM; i++)
+				printf("Finger[%d] IP Addr : %s, Port No : %d, ID : %d\n",
+					i, inet_ntoa(myNode.chordInfo.fingerInfo.finger[i].addrInfo.sin_addr),
+					ntohs(myNode.chordInfo.fingerInfo.finger[i].addrInfo.sin_port), myNode.chordInfo.fingerInfo.finger[i].ID);
+			
+			break;
+
+			/*Info 소스 시작 !!!*/
+		case 'I':
+		case 'i':
+			break;
+
+			/*Mute 소스 시작 !!!*/
+		case 'M':
+		case 'm':
+			
+			if (sMode == 1) {
+				sMode = 0;
+				printf("sMode가 종료되었습니다.\n");
+			
+			}
+			else {
+				sMode = 1;
+				printf("sMode가 시작되었습니다.\n");
+			}
+
+			break;
+
+			/*Help 소스 시작 !!!*/
+		case 'H':
+		case 'h':
+			printHelpCommand();
+			break;
+
+			/*BackUp 소스 시작 !!!*/
+		case 'B':
+		case 'b':
+			break;
+
+			/*Quit 소스 시작 !!!*/
+		case 'Q':
+		case 'q':
+			printf(" ------------------------------------------------------------\n");
+			printf("|                         Good Bye                           |\n");
+			printf(" ------------------------------------------------------------\n");
+			exit(1);
+			break;
+
+		}
+	}
+	//WaitForSingleObject(procRecvMsg, INFINITE);
+	closesocket(rpSock);
+	closesocket(rqSock);
+	WSACleanup();
+
+}
+//파일 다운리퀘스트 올때만 파일 리슨쓰레드를 생성함.
+/*procFixFinger 소스 시작!!!*/
+unsigned WINAPI procFixFinger(void *arg)
+{
+	Sleep(rand()%2001+5000);
+
+	printf("procFixFinger 소스 시작!!!\n");
+
+	int *exitFlag = (int*)arg;
+	int AddrLen = sizeof(struct sockaddr_in);
+	int retval;
+	nodeInfoType recvNode;
+	struct sockaddr_in receiveAddr;
+<<<<<<< HEAD
+
+	chordHeaderType rqMsg, rpMsg;
+
+=======
+    int p_try=0;
+	chordHeaderType rqMsg, rpMsg;
+
+	chordHeaderType reqMsg;
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+
+//	msgInfoType msgInfo;
+
+	if ((ffSock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("Error: socket failed!");
+		exit(1);
+	}
+
+	int optVal = 3000;
+	setsockopt(ffSock, SOL_SOCKET, SO_RCVTIMEO, (char *)&optVal, sizeof(optVal));
+	
+	while (!(*exitFlag)) 
+	{
+		Sleep(rand() % 2001 + 5000);
+
+		for (int i = 1; i < baseM; i++) 
+		{
+			int fingerId = modPlus(ringSize, myNode.nodeInfo.ID, twoPow(i));
+
+			/*FindPredcessor 요청*/
+			/*요청 메시지 생성*/
+			memset(&rqMsg, 0, sizeof(rqMsg));
+
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = FINDPRECOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = fingerId; // myNodeID + 2^i
+			rqMsg.bodySize = 0;
+
+			if (!sMode) {
+				printf("procFixFiner FindPre 요청 메시지 보냄.\n");
+			}
+			sendto(ffSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[0].addrInfo, AddrLen);
+			if (!sMode) {
+				printf("waiting...\n");
+			}
+			recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+			if (!sMode) {
+				printf("prcFixFinger FINDPRE시 PRE정보 : addr: %s, port : %d, id : %d\n",
+					inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+			}
+
+			/*SUCCSESSORINFO 전송*/
+		//	memset(&rpMsg, 0, sizeof(chordHeaderType));
+			memset(&rqMsg, 0, sizeof(chordHeaderType));
+			rqMsg.msgType = REQUEST;
+			rqMsg.msgID = SUCCINFOCOMMAND;
+			rqMsg.nodeInfo = myNode.nodeInfo;
+			rqMsg.moreInfo = 0;
+			rqMsg.bodySize = 0;
+
+			if (!sMode) {
+				printf("procFixFinger SUCCINFO 요청메시지 전송\n");
+			}
+			sendto(ffSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&rpMsg.nodeInfo.addrInfo, AddrLen);
+			if (!sMode) {
+				printf("waiting...\n");
+			}
+			recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+			if (!sMode) {
+				printf("procFixFinger SUCCINFOCOMMAND시 SUCC정보 : addr: %s, port : %d, id : %d\n",
+					inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+			}
+			WaitForSingleObject(hMutex, INFINITE);
+
+			myNode.chordInfo.fingerInfo.finger[i] = rpMsg.nodeInfo;
+<<<<<<< HEAD
+
+		
+			ReleaseMutex(hMutex);
+		}
+
+		//int p_try = 0;
+
+		//for(int i = 0; i<baseM; i++)
+		//{
+		//	while (1)
+		//	{
+		//		memset(&rqMsg, 0, sizeof(chordHeaderType));
+		//		rqMsg.msgType = REQUEST;
+		//		rqMsg.msgID = PINGPONGCOMMAND;
+		//		rqMsg.nodeInfo = myNode.nodeInfo;
+		//		rqMsg.moreInfo = 0;
+		//		rqMsg.bodySize = 0;
+
+
+		//		sendto(ffSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[i].addrInfo, AddrLen);
+		//		p_try++;
+		//		recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+		//		if (p_try == 3 && rpMsg.msgID != PINGPONGCOMMAND && rpMsg.moreInfo != SUCCESS)
+		//		{
+		//			if (i == 0)
+		//			{
+		//				for (int j = baseM; i < 0; i--)
+		//				{
+		//					memset(&rqMsg, 0, sizeof(chordHeaderType));
+		//					rqMsg.msgType = REQUEST;
+		//					rqMsg.msgID = PREINFOCOMMAND;
+		//					rqMsg.nodeInfo = myNode.nodeInfo;
+		//					rqMsg.moreInfo = 0;
+		//					rqMsg.bodySize = 0;
+		//					sendto(ffSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[i].addrInfo, AddrLen);
+		//					recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+		//					if (rpMsg.msgID == PREINFOCOMMAND && rpMsg.moreInfo == SUCCESS 
+		//								&& rpMsg.nodeInfo.ID == myNode.chordInfo.fingerInfo.finger[0].ID)
+		//					{
+		//						memset(&rqMsg, 0, sizeof(chordHeaderType));
+		//						rqMsg.msgType = REQUEST;
+		//						rqMsg.msgID = PREUPDATECOMMAND;
+		//						rqMsg.nodeInfo = myNode.nodeInfo;
+		//						rqMsg.moreInfo = 0;
+		//						rqMsg.bodySize = 0;
+		//						sendto(ffSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[i].addrInfo, AddrLen);
+		//						recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+		//						if (rpMsg.msgID == PREUPDATECOMMAND && rpMsg.moreInfo == SUCCESS)
+		//							myNode.chordInfo.fingerInfo.finger[0] = rpMsg.nodeInfo;
+
+
+		//					}
+		//	
+		//				}
+
+		//			}
+		//			//stabilize 시작해야함
+		//			//일단 pred일때만 리브안정화시작
+		//			//핑퐁 응답이 없는 노드가 피 핑퐁 노드의 succ가 아닐경우는 그냥 무시하는걸로 가정
+		//		}
+		//		if (rpMsg.msgID == PINGPONGCOMMAND && rpMsg.moreInfo == SUCCESS)
+		//		{
+		//			p_try = 0;
+		//			break;
+		//		}
+		//	}
+		//}
+=======
+		    myNode.chordInfo.fingerInfo.finger[i] = rpMsg.nodeInfo;
+			
+		
+			
+			
+
+			ReleaseMutex(hMutex);
+		}
+		
+		for(int i=0;i<baseM;i++)
+		{
+			while (!(*exitFlag))
+			{
+				memset(&rqMsg, 0, sizeof(chordHeaderType));
+				rqMsg.msgType = REQUEST;
+				rqMsg.msgID = PINGPONGCOMMAND;
+				rqMsg.nodeInfo = myNode.nodeInfo;
+				rqMsg.moreInfo = 0;
+				rqMsg.bodySize = 0;
+
+
+				sendto(ffSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[i].addrInfo, AddrLen);
+				p_try++;
+				recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+				if (p_try == 3 && rpMsg.msgID != PINGPONGCOMMAND || rpMsg.moreInfo != SUCCESS)
+				{
+					if (i == 0) //succ가 핑퐁응답이 없을 경우
+					{
+						/*for (int j = baseM; i < 0; i--)
+						{
+							memset(&rqMsg, 0, sizeof(chordHeaderType));
+							rqMsg.msgType = REQUEST;
+							rqMsg.msgID = PREINFOCOMMAND;
+							rqMsg.nodeInfo = myNode.nodeInfo;
+							rqMsg.moreInfo = 0;
+							rqMsg.bodySize = 0;
+							sendto(ffSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[i].addrInfo, AddrLen);
+							recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+
+							if (rpMsg.msgID == PREINFOCOMMAND && rpMsg.moreInfo == SUCCESS&& rpMsg.nodeInfo.ID == myNode.chordInfo.fingerInfo.finger[0].ID)
+							{
+								memset(&rqMsg, 0, sizeof(chordHeaderType));
+								rqMsg.msgType = REQUEST;
+								rqMsg.msgID = PREUPDATECOMMAND;
+								rqMsg.nodeInfo = myNode.nodeInfo;
+								rqMsg.moreInfo = myNode.chordInfo.fingerInfo.finger[i].ID;
+								rqMsg.bodySize = 0;
+								sendto(ffSock, (char*)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&myNode.chordInfo.fingerInfo.finger[i].addrInfo, AddrLen);
+								recvfrom(ffSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+								if (rpMsg.msgID == PREUPDATECOMMAND && rpMsg.moreInfo == SUCCESS)
+									myNode.chordInfo.fingerInfo.finger[0] = rpMsg.nodeInfo;
+
+
+							}
+			
+						}*/
+                        //이거 대신에 함수를 사용하여 다른 소켓을 이용하는것이 ffsock에 부하를 줄일 수 있음
+					}
+					//stabilize 시작해야함
+					//일단 pred일때만 리브안정화시작
+					//핑퐁 응답이 없는 노드가 피 핑퐁 노드의 succ가 아닐경우는 그냥 무시하는걸로 가정
+				}
+				if (rpMsg.msgID == PINGPONGCOMMAND && rpMsg.moreInfo == SUCCESS)
+				{
+					p_try = 0;
+					break;
+				}
+			}
+		}
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+	} 
+		
+	return 1;
+}
+
+unsigned WINAPI procFindPred(void *arg)
+{
+	printf("procFindPred 소스 시작!!!\n");
+	chordHeaderType rpMsg, rqMsg;
+	msgInfoType *msgInfo = malloc(sizeof(msgInfoType*));
+	msgInfo = (msgInfoType*)arg;
+	nodeInfoType recvNode;
+	struct sockaddr_in receiveAddr;
+
+	int AddrLen = sizeof(struct sockaddr_in);
+	int targetKey = msgInfo->msg.moreInfo;
+
+	if (!sMode) {
+		printf("msgInfo->addr : %s, msgInfo->port : %d, msgInfo.ID : %d\n",
+			inet_ntoa(msgInfo->senderSockAddr.sin_addr), ntohs(msgInfo->senderSockAddr.sin_port), msgInfo->msg.nodeInfo.ID);
+	}
+
+	memset(&rpMsg, 0, sizeof(rpMsg));
+	if (myNode.nodeInfo.ID == myNode.chordInfo.fingerInfo.finger[0].ID) // Initial Node 일 때
+	{
+		/*응답 메시지 인코딩*/
+		rpMsg.msgType = RESPOND; // respond
+		rpMsg.msgID = FINDPRECOMMAND;   
+		rpMsg.nodeInfo = myNode.nodeInfo;
+		rpMsg.moreInfo = SUCCESS;
+		rpMsg.bodySize = 0;
+		if (!sMode) {
+			printf("proFindPre [Initial Node]일 때 FINDPRE 메시지 응답.\n");
+		}
+		sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&(msgInfo->senderSockAddr), AddrLen);
+	}
+
+	else if (modIn(ringSize, targetKey, myNode.nodeInfo.ID, myNode.chordInfo.fingerInfo.finger[0].ID, 0, 1)) // Pre Node 일 때 
+	{
+		/*응답 메시지 인코딩*/
+		rpMsg.msgType = RESPOND; // respond
+		rpMsg.msgID = FINDPRECOMMAND; 
+		rpMsg.nodeInfo = myNode.nodeInfo;
+		rpMsg.moreInfo = SUCCESS;
+		rpMsg.bodySize = 0;
+		if (!sMode) {
+			printf("proFindPre [Predessor Node]일 때 FINDPRE 메시지 응답.\n");
+		}
+		sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&(msgInfo->senderSockAddr), AddrLen);
+	}
+
+	else
+	{
+		for (int i = baseM - 1; i >= 0; i--) {
+			if (modIn(ringSize, myNode.chordInfo.fingerInfo.finger[i].ID, myNode.nodeInfo.ID, targetKey, 0, 0))
+			{ 
+				recvNode = myNode.chordInfo.fingerInfo.finger[i];
+				break;
+			}
+		}
+		/*요청 메시지 생성*/
+		memset(&rqMsg, 0, sizeof(rqMsg));
+
+		rqMsg.msgType = REQUEST;
+		rqMsg.msgID = FINDPRECOMMAND;
+		rqMsg.nodeInfo = myNode.nodeInfo;
+		rqMsg.moreInfo = targetKey;
+		rqMsg.bodySize = 0;
+		
+		if (!sMode) {
+			printf("[else] procFindPred FINDPREDESSOR시 recvNode정보 : addr: %s, port : %d, id : %d\n",
+				inet_ntoa(recvNode.addrInfo.sin_addr), ntohs(recvNode.addrInfo.sin_port), recvNode.ID);
+		}
+		if (!sMode) {
+			printf("[else] procFindPred FINDPREDESSOR 메시지 요청.\n");
+		}
+		sendto(rqSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&recvNode.addrInfo, AddrLen);
+		
+		if (!sMode) {
+			printf("waiting...\n");
+		}
+		recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&receiveAddr, &AddrLen);
+		
+
+		//memset(&rpMsg, 0, sizeof(chordHeaderType));
+		rpMsg.msgType = RESPOND; // respond
+		rpMsg.msgID = FINDPRECOMMAND;
+		rpMsg.nodeInfo = rpMsg.nodeInfo;
+		rpMsg.moreInfo = SUCCESS;
+		rpMsg.bodySize = 0;
+		if (!sMode) {
+			printf("else proFindPre FINDPREDESSOR 후 FINDPRE 메시지 응답.\n");
+		}
+		sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&(msgInfo->senderSockAddr), AddrLen);
+
+
+	}
+
+	return 1;
+}
+
+unsigned WINAPI procFileRecv(void *arg)
+{
+	printf("file down Recv start\n");
+	FILE *file;
+	//int *exitFlag = (int*)arg;
+	int AddrLen = sizeof(struct sockaddr_in);
+	if ((frSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		perror("Error: socket failed!");
+		exit(1);
+	}
+
+	if (-1 == connect(frSock, (struct sockaddr*) &sharing.msg.nodeInfo.addrInfo, AddrLen))
+	{
+		perror("ERROR : CONECCT FAILED\n");
+		exit(1);
+	}
+	//connect해서 접속했으니 접속이된상태
+	//TCP 연결과정이 기억이 안남
+		
+
+
+	
+}
+/*procJoin 소스 시작!!!*/
+unsigned WINAPI procJoin(void *arg)
+{
+	//	struct sockaddr_in *senderAddr = malloc(sizeof(struct sockaddr_in));
+	//	senderAddr = (struct sockaddr_in*)arg;
+	printf("procJoin 시작!!!\n");
+	chordHeaderType rpMsg, rqMsg;
+
+	//chordHeaderType *Msg = malloc(sizeof(chordHeaderType*));
+	//Msg = (chordHeaderType*)arg;
+
+	msgInfoType *msgInfo = malloc(sizeof(msgInfoType*));
+	msgInfo = (msgInfoType*)arg;
+
+	struct sockaddr_in recvAddr;
+	nodeInfoType recvNode;
+
+	int AddrLen = sizeof(struct sockaddr_in);
+	//printf("senderAddr : %s\nsenderAddr port : %d\n", inet_ntoa(senderAddr->sin_addr), ntohs(senderAddr->sin_port));
+
+	if (!sMode) {
+		printf("msgInfo->addr : %s, msgInfo->port : %d, JoinNode.ID: %d\n",
+			inet_ntoa(msgInfo->senderSockAddr.sin_addr), ntohs(msgInfo->senderSockAddr.sin_port), msgInfo->msg.nodeInfo.ID);
+	}
+	int targetKey = modPlus(ringSize, msgInfo->msg.nodeInfo.ID, 1);
+	
+	memset(&rqMsg, 0, sizeof(rqMsg));
+
+	if (myNode.nodeInfo.ID == myNode.chordInfo.fingerInfo.finger[0].ID) // Initial Node 일 때
+	{
+		/*응답 메시지 인코딩*/
+		rpMsg.msgType = RESPOND; // respond
+		rpMsg.msgID = JOINCOMMAND;   // JoinInfo
+		rpMsg.nodeInfo = myNode.nodeInfo;
+		rpMsg.moreInfo = SUCCESS;
+		rpMsg.bodySize = 0;
+		if (!sMode) {
+			printf("proJoin [Initial Node]일 때 JoinInfo 메시지 응답.\n");
+		}
+		sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&(msgInfo->senderSockAddr), AddrLen);
+	}
+
+	else if (modIn(ringSize, targetKey, myNode.nodeInfo.ID, myNode.chordInfo.fingerInfo.finger[0].ID, 0, 1)) //내가 PRE Node 일 때
+	{
+		/*응답 메시지 인코딩*/
+		rpMsg.msgType = RESPOND; // respond
+		rpMsg.msgID = JOINCOMMAND;   // JoinInfo
+		rpMsg.nodeInfo = myNode.chordInfo.fingerInfo.finger[0];
+		rpMsg.moreInfo = SUCCESS;
+		rpMsg.bodySize = 0;
+		if (!sMode) {
+			printf("projoin[predessor Node]일 때 Joinfo 메시지 응답.\n");
+		}
+		sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&(msgInfo->senderSockAddr), AddrLen);
+	}
+
+	else
+	{
+		/*요청 메시지 생성*/
+		memset(&rqMsg, 0, sizeof(rqMsg));
+		for (int i = baseM - 1; i >= 0; i--) {
+			if (modIn(ringSize, myNode.chordInfo.fingerInfo.finger[i].ID, myNode.nodeInfo.ID, targetKey, 0, 0))
+			{
+				recvNode = myNode.chordInfo.fingerInfo.finger[i];
+				break;
+			}
+		}
+
+		rqMsg.msgType = REQUEST;
+		rqMsg.msgID = FINDPRECOMMAND;   
+		rqMsg.nodeInfo = myNode.nodeInfo;
+		rqMsg.moreInfo = targetKey;
+		rqMsg.bodySize = 0;
+
+		if (!sMode) {
+			printf("[else] procJoin FINDPREDESSOR시 recvNode정보 : addr: %s, port : %d, id : %d\n",
+				inet_ntoa(recvNode.addrInfo.sin_addr), ntohs(recvNode.addrInfo.sin_port), recvNode.ID);
+		}
+		if (!sMode) {
+			printf("[else] procJoin FINDPREDESSOR 메시지 요청.\n");
+		}
+		sendto(rqSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&recvNode.addrInfo, AddrLen);
+		if (!sMode) {
+			printf("waiting...\n");
+		}
+		recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&recvAddr, &AddrLen);
+		//recvNode.addrInfo에 주소 저장되는데.. 쓸일은 없을거같다.
+
+		/*Pre에게 Successor 요청 */
+		memset(&rqMsg, 0, sizeof(chordHeaderType));
+		rqMsg.msgType = REQUEST;
+		rqMsg.msgID = SUCCINFOCOMMAND;
+		rqMsg.nodeInfo = myNode.nodeInfo;
+		rqMsg.moreInfo = 0;
+		rqMsg.bodySize = 0;
+
+		if (!sMode) {
+			printf("[else] procjoin SUCCINFO 요청메시지 전송\n");
+		}
+		sendto(rqSock, (char *)&rqMsg, sizeof(rqMsg), 0, (struct sockaddr*)&rpMsg.nodeInfo.addrInfo, AddrLen);
+		if (!sMode) {
+			printf("waiting...\n");
+		}
+		recvfrom(rqSock, (char*)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&recvAddr, &AddrLen);
+		if (!sMode) {
+			printf("procJoin SUCCINFOCOMMAND시 SUCC정보 : addr: %s, port : %d, id : %d\n",
+				inet_ntoa(rpMsg.nodeInfo.addrInfo.sin_addr), ntohs(rpMsg.nodeInfo.addrInfo.sin_port), rpMsg.nodeInfo.ID);
+		}
+
+		/*JOININFO REQUEST 전송*/
+	//	memset(&rpMsg, 0, sizeof(chordHeaderType));
+
+		rpMsg.msgType = RESPOND; // respond
+		rpMsg.msgID = JOINCOMMAND;   // JoinInfo
+		rpMsg.nodeInfo = rpMsg.nodeInfo;
+		rpMsg.moreInfo = SUCCESS;
+		rpMsg.bodySize = 0;
+		if (!sMode) {
+			printf("projoin else Node일 때 Joinfo 메시지 응답.\n");
+		}
+		sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr*)&(msgInfo->senderSockAddr), AddrLen);
+	}
+
+	return 1;
+}
+
+
+/*proCRecvMsg 소스 시작 !!!*/
+unsigned WINAPI procRecvMsg(void *arg)
+{
+	printf("procRecvMsg 시작!!!\n");
+	int *exitFlag = (int*)arg;
+	int AddrLen = sizeof(struct sockaddr_in);
+	int retval;
+	chordHeaderType Msg;
+	chordHeaderType rpMsg;
+	msgInfoType msgInfo;
+
+	if (-1 == bind(rpSock, (struct sockaddr*)&myNode.nodeInfo.addrInfo, sizeof(struct sockaddr)))
+	{
+		perror("bind() error!");
+		exit(1);
+	}
+
+	while (!(*exitFlag)) {
+
+		memset((char *)&Msg, 0, sizeof(Msg));
+		memset((char *)&msgInfo, 0, sizeof(msgInfo));
+		/*요청 메시지 수신 대기*/
+		retval = recvfrom(rpSock, (char *)&msgInfo.msg, sizeof(Msg), 0, (struct sockaddr*)&msgInfo.senderSockAddr, &AddrLen);
+		if (!sMode) {
+			printf("procRecvMsg에서 Msg Addr : %s, port : %d\n", inet_ntoa(msgInfo.msg.nodeInfo.addrInfo.sin_addr), ntohs(msgInfo.msg.nodeInfo.addrInfo.sin_port));
+		}
+
+		if (retval == SOCKET_ERROR) {
+			if (WSAGetLastError() == WSAETIMEDOUT) {
+				printf("CHORD> procRecvMsg recvfrom timed out.\n");
+			}
+			else {
+				printf("CHORD> error %d\n", WSAGetLastError());
+			}
+			continue;
+		}
+		//		printf("senderAddr : %s\nport : %d\n", inet_ntoa(senderAddr.sin_addr), ntohs(senderAddr.sin_port));		
+				/*요청 메시지 타입 확인*/
+		if (Msg.msgType == REQUEST) { // 요청 메시지이면
+			if (!sMode) {
+				printf("요청 메시지 요청받음.\n");
+			}
+			switch (msgInfo.msg.msgID)
+			{
+			case JOINCOMMAND: // 요청 메시지가 JOIN이면
+
+				joinThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procJoin, (void *)&msgInfo, 0, NULL);
+				WaitForSingleObject(joinThread, INFINITE);
+
+				break;
+
+			case FINDPRECOMMAND:
+
+				findPreThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFindPred, (void *)&msgInfo, 0, NULL);
+				WaitForSingleObject(findPreThread, INFINITE);
+
+				break;
+
+			case SUCCINFOCOMMAND:
+				memset(&rpMsg, 0, sizeof(rpMsg));
+				/*수신 메시지 인코딩*/
+				rpMsg.msgType = RESPOND; // respond
+				rpMsg.msgID = SUCCINFOCOMMAND;   // JoinInfo
+				rpMsg.nodeInfo = myNode.chordInfo.fingerInfo.finger[0];
+				rpMsg.moreInfo = SUCCESS;
+				rpMsg.bodySize = 0;
+				if (!sMode) {
+					printf("SuccInfo 메시지 응답.\n");
+				}
+				sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &msgInfo.senderSockAddr, AddrLen);
+
+				break;
+
+			case PREINFOCOMMAND:
+
+				memset(&rpMsg, 0, sizeof(rpMsg));
+				/*수신 메시지 인코딩*/
+				rpMsg.msgType = RESPOND; // respond
+				rpMsg.msgID = PREINFOCOMMAND;   // JoinInfo
+				rpMsg.nodeInfo = myNode.chordInfo.fingerInfo.Pre;
+				rpMsg.moreInfo = SUCCESS;
+				rpMsg.bodySize = 0;
+				if (!sMode) {
+					printf("PreInfo 메시지 응답.\n");
+				}
+				sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *) &msgInfo.senderSockAddr, AddrLen);
+				break;
+
+			case PREUPDATECOMMAND :
+				memset(&rpMsg, 0, sizeof(rpMsg));
+
+				WaitForSingleObject(hMutex, INFINITE);
+				myNode.chordInfo.fingerInfo.Pre = msgInfo.msg.nodeInfo;
+				ReleaseMutex(hMutex);
+
+				rpMsg.msgType = RESPOND; // respond
+				rpMsg.msgID = PREUPDATECOMMAND;
+				rpMsg.nodeInfo = myNode.nodeInfo;
+				rpMsg.moreInfo = SUCCESS;
+				rpMsg.bodySize = 0;
+				if (!sMode) {
+					printf("PREUPDATE 메시지 응답.\n");
+				}
+				sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *)&msgInfo.senderSockAddr, AddrLen);
+
+				break;
+			case PINGPONGCOMMAND:
+				memset(&rpMsg, 0, sizeof(rpMsg));
+				/*수신 메시지 인코딩*/
+				rpMsg.msgType = RESPOND; // respond
+				rpMsg.msgID = PINGPONGCOMMAND;   // JoinInfo
+				rpMsg.nodeInfo = myNode.nodeInfo;
+				rpMsg.moreInfo = SUCCESS;
+				rpMsg.bodySize = 0;
+<<<<<<< HEAD
+				if (!sMode) {
+					printf("PINGPONG 메시지 응답.\n");
+				}
+=======
+				printf("핑퐁 메시지 응답잼\n");
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+				sendto(rpSock,(char *)&rpMsg,sizeof(rpMsg),0, (struct sockaddr *)&msgInfo.senderSockAddr, AddrLen);
+				break;
+			case SUCCUPDATECOMMAND :
+				memset(&rpMsg, 0, sizeof(rpMsg));
+
+				WaitForSingleObject(hMutex, INFINITE);
+				myNode.chordInfo.fingerInfo.finger[0] = msgInfo.msg.nodeInfo;
+				ReleaseMutex(hMutex);
+
+				rpMsg.msgType = RESPOND; 
+				rpMsg.msgID = SUCCUPDATECOMMAND;   // JoinInfo
+				rpMsg.nodeInfo = myNode.nodeInfo;
+				rpMsg.moreInfo = SUCCESS;
+				rpMsg.bodySize = 0;
+				if (!sMode) {
+					printf("SUCCUPDATE 메시지 응답.\n");
+				}
+				sendto(rpSock, (char *)&rpMsg, sizeof(rpMsg), 0, (struct sockaddr *)&msgInfo.senderSockAddr, AddrLen);
+
+				break;
+			case FILEDOWNCOMMAND:
+                //여기서 파일크기를 보내야함
+                memset(&rpMsg, 0, sizeof(rpMsg));
+
+                rpMsg.msgType = RESPOND;
+                rpMsg.msgID = FILEDOWNCOMMAND;
+                rpMsg.nodeInfo = myNode.nodeInfo;
+               // rpMsg.moreInfo = 
+
+
+				break;
+            case FILEADDCOMMAND :
+
+                myNode.fileInfo.fileNum++;
+                myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].Key = msgInfo.msg.fileInfo.Key;
+              strcpy(myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].Name , msgInfo.msg.fileInfo.Name); // 안되면 strcpy
+                myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].owner = msgInfo.msg.fileInfo.owner;
+                myNode.fileInfo.fileRef[myNode.fileInfo.fileNum - 1].refOwner = myNode.nodeInfo;
+
+
+                //이제 잘 추가됐다고 rpmsg 보내면됨
+
+
+                //파일 참조자 측에서도 파일 소유자 정보를 갖고 있어야함
+                //파일 소유자 : owner : 자신 refowner : 참조하고 있는놈
+                //파일 참조자 : owner 자신에게 파일 애드 커맨드를 보낸놈 refowner : 자신
+                break;
+			}
+
+
+		}
+
+	}
+	return 1;
+}
+
+unsigned WINAPI procFileListen(void *arg)
+{
+	int client_sock;
+	struct sockaddr_in clientaddr;
+	printf("file listen start\n");
+	int *exitFlag = (int*)arg;
+	int AddrLen = sizeof(struct sockaddr_in);
+	int retval;
+	if ((flSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		perror("Error: socket failed!");
+		exit(1);
+	}
+	if (-1 == bind(flSock, (struct sockaddr*)&myNode.nodeInfo.addrInfo, AddrLen))
+	{
+		perror("flsock바인딩오류");
+		exit(1);
+	}
+	if (-1 == listen(flSock, 5))
+	{
+		perror("flsock리슨오류");
+		exit(1);
+	}
+	//소켓바인딩/리슨
+	while (!(*exitFlag)) {
+		//커넥트
+		client_sock = accept(flSock, (struct sockaddr*)&clientaddr, &AddrLen);
+		printf("Detected Who Wants to download your file : %s ", inet_ntoa(clientaddr.sin_addr));
+        
+
+		fileSendThread = (HANDLE)_beginthreadex(NULL, 0, (void*)procFileSend, (void*)&exitFlag, 0, NULL);
+		//이쓰레드는 파일 다보내고 종료되야하기에 플래그를 다른거로 해야될 수도 있음
+		//쓰레드 간에 공유할 전역변수가 필요함
+
+
+
+	}
+	//flsock임
+	//recvthread에서 파일 다운로드 요청을 받았을 경우 flsock을 넘김
+	//파일을 원하는 유저는 flsock을 받으면 filerecvthread 를 생성하고 frsock으로 flsock에게 요청함
+	//flsock에서 요청이 들어오면 fssock으로 파일을 파일 크기만큼 전송함
+
+
+
+	return 1;
+}
+unsigned WINAPI procFileSend(void *arg)
+{
+
+
+
+}
+int modIn(int modN, int targNum, int range1, int range2, int leftmode, int rightmode)
+// leftmode, rightmode: 0 => range boundary not included, 1 => range boundary included   
+{
+	int result = 0;
+
+	if (range1 == range2) {
+		if ((leftmode == 0) || (rightmode == 0))
+			return 0;
+	}
+
+	if (modPlus(ringSize, range1, 1) == range2) {
+		if ((leftmode == 0) && (rightmode == 0))
+			return 0;
+	}
+
+	if (leftmode == 0)
+		range1 = modPlus(ringSize, range1, 1);
+	if (rightmode == 0)
+		range2 = modMinus(ringSize, range2, 1);
+
+	if (range1 < range2) {
+		if ((targNum >= range1) && (targNum <= range2))
+			result = 1;
+	}
+	else if (range1 > range2) {
+		if (((targNum >= range1) && (targNum < modN))
+			|| ((targNum >= 0) && (targNum <= range2)))
+			result = 1;
+	}
+	else if ((targNum == range1) && (targNum == range2))
+		result = 1;
+
+	return result;
+}
+
+int twoPow(int power)
+{
+	int i;
+	int result = 1;
+
+	if (power >= 0)
+		for (i = 0; i < power; i++)
+			result *= 2;
+	else
+		result = -1;
+
+	return result;
+}
+
+int modMinus(int modN, int minuend, int subtrand)
+{
+	if (minuend - subtrand >= 0)
+		return minuend - subtrand;
+	else
+		return (modN - subtrand) + minuend;
+}
+
+int modPlus(int modN, int addend1, int addend2)
+{
+	if (addend1 + addend2 < modN)
+		return addend1 + addend2;
+	else
+		return (addend1 + addend2) - modN;
+}
+<<<<<<< HEAD
+
+static unsigned char sTable[256] =
+=======
+static const unsigned char sTable[256] =
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+{
+	0xa3,0xd7,0x09,0x83,0xf8,0x48,0xf6,0xf4,0xb3,0x21,0x15,0x78,0x99,0xb1,0xaf,0xf9,
+	0xe7,0x2d,0x4d,0x8a,0xce,0x4c,0xca,0x2e,0x52,0x95,0xd9,0x1e,0x4e,0x38,0x44,0x28,
+	0x0a,0xdf,0x02,0xa0,0x17,0xf1,0x60,0x68,0x12,0xb7,0x7a,0xc3,0xe9,0xfa,0x3d,0x53,
+	0x96,0x84,0x6b,0xba,0xf2,0x63,0x9a,0x19,0x7c,0xae,0xe5,0xf5,0xf7,0x16,0x6a,0xa2,
+	0x39,0xb6,0x7b,0x0f,0xc1,0x93,0x81,0x1b,0xee,0xb4,0x1a,0xea,0xd0,0x91,0x2f,0xb8,
+	0x55,0xb9,0xda,0x85,0x3f,0x41,0xbf,0xe0,0x5a,0x58,0x80,0x5f,0x66,0x0b,0xd8,0x90,
+	0x35,0xd5,0xc0,0xa7,0x33,0x06,0x65,0x69,0x45,0x00,0x94,0x56,0x6d,0x98,0x9b,0x76,
+	0x97,0xfc,0xb2,0xc2,0xb0,0xfe,0xdb,0x20,0xe1,0xeb,0xd6,0xe4,0xdd,0x47,0x4a,0x1d,
+	0x42,0xed,0x9e,0x6e,0x49,0x3c,0xcd,0x43,0x27,0xd2,0x07,0xd4,0xde,0xc7,0x67,0x18,
+	0x89,0xcb,0x30,0x1f,0x8d,0xc6,0x8f,0xaa,0xc8,0x74,0xdc,0xc9,0x5d,0x5c,0x31,0xa4,
+	0x70,0x88,0x61,0x2c,0x9f,0x0d,0x2b,0x87,0x50,0x82,0x54,0x64,0x26,0x7d,0x03,0x40,
+	0x34,0x4b,0x1c,0x73,0xd1,0xc4,0xfd,0x3b,0xcc,0xfb,0x7f,0xab,0xe6,0x3e,0x5b,0xa5,
+	0xad,0x04,0x23,0x9c,0x14,0x51,0x22,0xf0,0x29,0x79,0x71,0x7e,0xff,0x8c,0x0e,0xe2,
+	0x0c,0xef,0xbc,0x72,0x75,0x6f,0x37,0xa1,0xec,0xd3,0x8e,0x62,0x8b,0x86,0x10,0xe8,
+	0x08,0x77,0x11,0xbe,0x92,0x4f,0x24,0xc5,0x32,0x36,0x9d,0xcf,0xf3,0xa6,0xbb,0xac,
+	0x5e,0x6c,0xa9,0x13,0x57,0x25,0xb5,0xe3,0xbd,0xa8,0x3a,0x01,0x05,0x59,0x2a,0x46
+};
+
+#define PRIME_MULT 1717
+/*void shuffle_hash_table()
+{
+	int num = rand() % 10 + 1;
+	int start, finish;
+	int deg;
+	for (int i = 0; i < num; i++)
+	{
+		start = rand() % 253 + 1;
+		finish = rand()%(255-start) + start+1;
+		deg = finish - start;
+		unsigned char * temp = malloc(sizeof(unsigned char)*deg+1);
+		for (int j = 0; j <deg+1; j++)
+			temp[j] = sTable[j + start];
+		for (int j = start; j < finish+1; j++)
+			sTable[j] = sTable[j + deg+1];
+		for (int j = finish+1; j < finish+deg+1; j++)
+			sTable[j] = temp[j-finish-1];
+
+	}
+<<<<<<< HEAD
+}//하기전에 해시테이블 셔플링을 한다. 노드마다 다른 테이블을 쓰므로써 중복을 더 줄일 수 있다 아마도.
+
+=======
+}//하기전에 해시테이블 셔플링을 한다. 노드마다 다른 테이블을 쓰므로써 중복을 더 줄일 수 있다 아마도.*/
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+unsigned int str_hash(const char *str)  /* Hash: String to Key */
+{
+	unsigned int len = sizeof(str);
+	unsigned int hash = len, i;
+<<<<<<< HEAD
+	//shuffle_hash_table();   //1114 TODO
+=======
+	//shuffle_hash_table();
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+	srand((unsigned int)time(NULL));
+
+	/*기존에 Chord 시뮬레이터 소스 일단 씀 (IP로 해쉬값만들어서 rand() 추가했음)*/
+	for (i = 0; i != len; i++, str++) {
+		hash ^= sTable[rand() % (*str + i) & 255];
+		hash = hash * PRIME_MULT;
+	}
+	//suha : 모든 경우의 수가 동일한 확률 , 각각의 해싱값이 연관없음
+
+	return hash % ringSize;
+}
+
+

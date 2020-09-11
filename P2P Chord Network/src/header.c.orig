@@ -1,0 +1,87 @@
+#define _CRT_SECURE_NO_WARNINGS
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <winsock2.h>
+#include <string.h>
+#include <windows.h>
+#include <process.h>
+
+#define FNameMax 32 /* Max length of File Name */
+#define FileMax 32 /* Max number of Files */
+#define baseM 6 /* base number */
+#define ringSize 64 /* ringSize = 2^baseM */
+#define fBufSize 1024 /* file buffer size */
+#define nodefmax 10  /* Max number of files in a node */
+#define FNameMax 32  /* Max length of File Data */
+
+#define REQUEST 0
+#define RESPOND 1
+
+#define SUCCESS 0
+#define FAILURE -1
+
+#define JOINCOMMAND 1
+#define FINDPRECOMMAND 2
+#define SUCCINFOCOMMAND 3
+#define PREINFOCOMMAND 4
+#define PREUPDATECOMMAND 5
+#define SUCCUPDATECOMMAND 6
+#define MOVEKEYCOMMAND 7
+<<<<<<< HEAD
+#define PINGPONGCOMMAND 8
+#define FILEDOWNCOMMAND 9
+=======
+#define FILEDOWNCOMMAND 8
+#define PINGPONGCOMMAND 9
+#define FILEADDCOMMAND 10
+>>>>>>> 2654d47cb298b749a5f72d8ac12ff27dd4803dfb
+
+typedef struct { /* Node Info Type Structure */
+	int ID; /* ID */
+	struct sockaddr_in addrInfo; /* Socket address */
+} nodeInfoType;
+
+typedef struct { /* File Type Structure */
+	char Name[FNameMax]; /* File Name */
+	int Key; /* File Key */
+	nodeInfoType owner; /* Owner's Node */
+	nodeInfoType refOwner; /* Ref Owner's Node */
+} fileRefType;
+
+typedef struct { /* Global Information of Current Files */
+	unsigned int fileNum; /* Number of files */
+	fileRefType fileRef[FileMax]; /* The Number of Current Files */
+} fileInfoType;
+
+typedef struct { /* Finger Table Structure */
+	nodeInfoType Pre; /* Predecessor pointer */
+	nodeInfoType finger[baseM]; /* Fingers (array of pointers) */
+} fingerInfoType;
+
+typedef struct { /* Chord Information Structure */
+	fileInfoType FRefInfo; /* File Ref Own Information */
+	fingerInfoType fingerInfo; /* Finger Table Information */
+} chordInfoType;
+
+typedef struct { /* Node Structure */
+	nodeInfoType nodeInfo; /* Node's IPv4 Address */
+	fileInfoType fileInfo; /* File Own Information */
+	chordInfoType chordInfo; /* Chord Data Information */
+} nodeType;
+
+typedef struct {
+	unsigned short msgID; // message ID
+	unsigned short msgType; // message type (0: request, 1: response)
+	nodeInfoType nodeInfo;// node address info
+	short moreInfo; // more info
+	fileRefType fileInfo; // file (reference) info
+	unsigned int bodySize; // body size in Bytes
+} chordHeaderType; // CHORD message header type
+
+typedef struct {
+	chordHeaderType msg;
+	struct sockaddr_in senderSockAddr; //받는놈 ip주소
+}msgInfoType;//쓰레드끼리 공유하는데 사용??
